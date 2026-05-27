@@ -1,4 +1,4 @@
-在LifeGame_V1文件夹双击CMakePro_CUDA.exe即直接可运行。欢迎交流。
+在CMakePro_CUDA_LifeGame_V2/EXE/CMakePro_CUDA_LifeGame文件夹双击CMakePro_CUDA_LifeGame.exe即直接可运行。欢迎交流。
 
 ---
 
