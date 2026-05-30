@@ -43,19 +43,18 @@ jobs:
         cmake -B build \
           -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-          -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90" \
-          2>&1 | tee configure.log
+          -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90"
     
     - name: Build
       working-directory: CMakePro_CUDA_LifeGame_V2
       run: |
-        cmake --build build --config ${{ env.BUILD_TYPE }} -j$(nproc) 2>&1 | tee build.log
+        cmake --build build --config ${{ env.BUILD_TYPE }} -j$(nproc)
     
     - name: Prepare package
       working-directory: CMakePro_CUDA_LifeGame_V2
       run: |
         mkdir -p package
-        cp build/CMakePro_CUDA_LifeGame_V2 package/ 2>/dev/null || echo "Binary not found, checking build dir:"
+        cp build/CMakePro_CUDA_LifeGame_V2 package/ 2>/dev/null || echo "Binary not found"
         ls -la build/ | head -20
         cp -r resources_LifeGame_V2 package/
         tar -czf GlobalAttention-LifeGame-linux-x64.tar.gz -C package .
@@ -66,16 +65,6 @@ jobs:
         name: linux-build
         path: CMakePro_CUDA_LifeGame_V2/GlobalAttention-LifeGame-linux-x64.tar.gz
         retention-days: 7
-    
-    - name: Upload logs on failure
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: linux-logs
-        path: |
-          CMakePro_CUDA_LifeGame_V2/configure.log
-          CMakePro_CUDA_LifeGame_V2/build.log
-        retention-days: 3
 
   build-windows:
     runs-on: windows-2022
@@ -83,11 +72,54 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Setup CUDA
-      uses: Jimver/cuda-toolkit@v0.2.14
-      with:
-        cuda: '12.2.0'
-        method: 'network'
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+    
+    - name: Download CUDA Toolkit
+      shell: pwsh
+      run: |
+        Write-Host "Downloading CUDA Toolkit 12.2.0..."
+        $cudaUrl = "https://developer.download.nvidia.com/compute/cuda/12.2.0/local_installers/cuda_12.2.0_535.54.03_windows.exe"
+        $cudaInstaller = "$env:TEMP\cuda_installer.exe"
+        
+        # Download with progress
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $cudaUrl -OutFile $cudaInstaller -UseBasicParsing
+        Write-Host "Download completed: $(Get-Item $cudaInstaller).Length bytes"
+    
+    - name: Install CUDA Toolkit
+      shell: pwsh
+      run: |
+        $cudaInstaller = "$env:TEMP\cuda_installer.exe"
+        
+        # Silent install with specific components
+        Start-Process -FilePath $cudaInstaller -ArgumentList @(
+          '-s',
+          'nvcc_12.2',
+          'visual_studio_integration_12.2',
+          'cudart_12.2',
+          'cublas_12.2',
+          'cublas_dev_12.2',
+          'cufft_12.2',
+          'cufft_dev_12.2',
+          'curand_12.2',
+          'curand_dev_12.2',
+          'cusolver_12.2',
+          'cusolver_dev_12.2',
+          'cusparse_12.2',
+          'cusparse_dev_12.2',
+          'thrust_12.2'
+        ) -Wait -NoNewWindow
+        
+        Write-Host "CUDA installation completed"
+        
+        # Set environment variables
+        $env:CUDA_PATH = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2"
+        $env:CUDA_PATH_V12_2 = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2"
+        $env:PATH = "$env:CUDA_PATH\bin;$env:PATH"
+        
+        # Verify installation
+        & "$env:CUDA_PATH\bin\nvcc.exe" --version
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
@@ -106,12 +138,15 @@ jobs:
     
     - name: Configure
       working-directory: CMakePro_CUDA_LifeGame_V2
-      shell: cmd
+      shell: pwsh
+      env:
+        CUDA_PATH: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2
       run: |
-        cmake -B build -G "Visual Studio 17 2022" -A x64 ^
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
-          -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90" ^
-          -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+        cmake -B build -G "Visual Studio 17 2022" -A x64 `
+          -DCMAKE_BUILD_TYPE="${{ env.BUILD_TYPE }}" `
+          -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90" `
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
+          -DCMAKE_CUDA_COMPILER="$env:CUDA_PATH\bin\nvcc.exe"
     
     - name: Build
       working-directory: CMakePro_CUDA_LifeGame_V2
