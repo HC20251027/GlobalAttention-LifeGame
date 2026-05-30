@@ -1609,13 +1609,13 @@ void ReallocateSimulation(GLHandles& gl, int newW, int newH) {
     gl.simW = newW;
     gl.simH = newH;
 
-    // 4. 分配新显存 (注意检查错误)
-    cudaMalloc(&gl.d_current, (size_t)gl.simW * gl.simH);
-    cudaMalloc(&gl.d_next, (size_t)gl.simW * gl.simH);
+    // 4. 分配新显存（float 化）
+    cudaMalloc(&gl.d_current, (size_t)gl.simW * gl.simH * sizeof(float));
+    cudaMalloc(&gl.d_next, (size_t)gl.simW * gl.simH * sizeof(float));
     cudaMalloc(&gl.d_heatData, (size_t)gl.simW * gl.simH * sizeof(float));
 
     // 初始清零
-    cudaMemset(gl.d_current, 0, (size_t)gl.simW * gl.simH);
+    cudaMemset(gl.d_current, 0, (size_t)gl.simW * gl.simH * sizeof(float));
     cudaMemset(gl.d_heatData, 0, (size_t)gl.simW * gl.simH * sizeof(float));
 
     // 5. 创建新 OpenGL 纹理
@@ -1636,7 +1636,7 @@ void ReallocateSimulation(GLHandles& gl, int newW, int newH) {
     InitCudaLife(gl.simW, gl.simH);
 
     // 8. 填充初始随机种子，防止黑屏
-    SeedCudaLife(gl.d_current, gl.simW, gl.simH, 0.2f);
+    SeedCudaLifeFloat(gl.d_current, gl.simW, gl.simH, 0.2f);
 
     cudaDeviceSynchronize();
 }
