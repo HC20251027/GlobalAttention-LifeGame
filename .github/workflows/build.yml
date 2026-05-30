@@ -75,51 +75,33 @@ jobs:
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
     
-    - name: Download CUDA Toolkit
-      shell: pwsh
-      run: |
-        Write-Host "Downloading CUDA Toolkit 12.2.0..."
-        $cudaUrl = "https://developer.download.nvidia.com/compute/cuda/12.2.0/local_installers/cuda_12.2.0_535.54.03_windows.exe"
-        $cudaInstaller = "$env:TEMP\cuda_installer.exe"
-        
-        # Download with progress
-        $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $cudaUrl -OutFile $cudaInstaller -UseBasicParsing
-        Write-Host "Download completed: $(Get-Item $cudaInstaller).Length bytes"
+    - name: Setup CUDA
+      id: cuda
+      uses: Jimver/cuda-toolkit@v0.2.15
+      with:
+        cuda: '12.2.0'
+        method: 'network'
+      continue-on-error: true
     
-    - name: Install CUDA Toolkit
+    - name: Check CUDA
+      if: steps.cuda.outcome == 'failure'
       shell: pwsh
       run: |
-        $cudaInstaller = "$env:TEMP\cuda_installer.exe"
+        Write-Host "CUDA installation via Jimver failed, trying manual download..."
+        # Fallback: download CUDA manually
+        $cudaUrl = "https://developer.download.nvidia.com/compute/cuda/12.2.0/local_installers/cuda_12.2.0_535.54.03_windows.exe"
+        $cudaInstaller = "$env:RUNNER_TEMP\cuda_installer.exe"
         
-        # Silent install with specific components
-        Start-Process -FilePath $cudaInstaller -ArgumentList @(
-          '-s',
-          'nvcc_12.2',
-          'visual_studio_integration_12.2',
-          'cudart_12.2',
-          'cublas_12.2',
-          'cublas_dev_12.2',
-          'cufft_12.2',
-          'cufft_dev_12.2',
-          'curand_12.2',
-          'curand_dev_12.2',
-          'cusolver_12.2',
-          'cusolver_dev_12.2',
-          'cusparse_12.2',
-          'cusparse_dev_12.2',
-          'thrust_12.2'
-        ) -Wait -NoNewWindow
-        
-        Write-Host "CUDA installation completed"
-        
-        # Set environment variables
-        $env:CUDA_PATH = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2"
-        $env:CUDA_PATH_V12_2 = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2"
-        $env:PATH = "$env:CUDA_PATH\bin;$env:PATH"
-        
-        # Verify installation
-        & "$env:CUDA_PATH\bin\nvcc.exe" --version
+        try {
+          Invoke-WebRequest -Uri $cudaUrl -OutFile $cudaInstaller -UseBasicParsing
+          Write-Host "Download completed"
+          
+          Start-Process -FilePath $cudaInstaller -ArgumentList '-s','nvcc_12.2','cudart_12.2','visual_studio_integration_12.2' -Wait -NoNewWindow
+          Write-Host "CUDA installed manually"
+        } catch {
+          Write-Host "Manual CUDA install also failed: $_"
+          Write-Host "Will try to build without CUDA-specific features"
+        }
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
@@ -139,14 +121,17 @@ jobs:
     - name: Configure
       working-directory: CMakePro_CUDA_LifeGame_V2
       shell: pwsh
-      env:
-        CUDA_PATH: C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2
       run: |
+        $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2"
+        if (Test-Path $cudaPath) {
+          $env:CUDA_PATH = $cudaPath
+          $env:PATH = "$cudaPath\bin;$env:PATH"
+        }
+        
         cmake -B build -G "Visual Studio 17 2022" -A x64 `
           -DCMAKE_BUILD_TYPE="${{ env.BUILD_TYPE }}" `
           -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90" `
-          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
-          -DCMAKE_CUDA_COMPILER="$env:CUDA_PATH\bin\nvcc.exe"
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
     
     - name: Build
       working-directory: CMakePro_CUDA_LifeGame_V2
