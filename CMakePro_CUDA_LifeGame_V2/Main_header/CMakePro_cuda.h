@@ -1760,8 +1760,8 @@ void RenderLifeGameScreen_GPU(SimState& state, int winW, int winH, GLHandles& gl
             int my = (int)(worldY * (float)gl.simH);
 
             if (mx >= 0 && mx < gl.simW && my >= 0 && my < gl.simH) {
-                MousePaintCuda(gl.d_current, gl.d_heatData, gl.simW, gl.simH, mx, my, brushRadius, ImGui::IsMouseDown(1));
-                cudaMemcpy(gl.d_next, gl.d_current, gl.simW * gl.simH, cudaMemcpyDeviceToDevice);
+                MousePaintCudaFloat(gl.d_current, gl.d_heatData, gl.simW, gl.simH, mx, my, brushRadius, ImGui::IsMouseDown(1));
+                cudaMemcpy(gl.d_next, gl.d_current, (size_t)gl.simW * gl.simH * sizeof(float), cudaMemcpyDeviceToDevice);
             }
         }
     }
@@ -1782,26 +1782,54 @@ void RenderLifeGameScreen_GPU(SimState& state, int winW, int winH, GLHandles& gl
     static float trailDecay = 0.99f;
     bool logicStepPerformed = false;
 
+    // 静态注意力参数（带预设值）
+    static AttentionParams attnParams;
+
     if (state.running) {
         tickTimer += io.DeltaTime;
         totalSimTime += io.DeltaTime;
         if (tickTimer >= tickRate) {
             tickTimer = 0;
             generation++;
-            UpdateLifeCuda(gl.d_current, gl.d_next, gl.d_heatData, gl.simW, gl.simH, io.DeltaTime,
-                false, trailDecay, rules[currentRuleIdx].b, rules[currentRuleIdx].s);
-            cudaMemcpy(gl.d_current, gl.d_next, (size_t)gl.simW * gl.simH, cudaMemcpyDeviceToDevice);
+            // 根据当前模式调度对应 kernel
+            switch (gl.currentMode) {
+            case SimMode::Classic:
+                ClassicUpdateCuda(gl.d_current, gl.d_next, gl.d_heatData,
+                    gl.simW, gl.simH, io.DeltaTime, false, trailDecay,
+                    rules[currentRuleIdx].b, rules[currentRuleIdx].s);
+                break;
+            case SimMode::GlobalStats:
+                GlobalStatsUpdateCuda(gl.d_current, gl.d_next, gl.d_heatData,
+                    gl.d_globalStats, gl.simW, gl.simH, io.DeltaTime, false, trailDecay,
+                    attnParams.w_local, attnParams.w_global, attnParams.threshold);
+                break;
+            case SimMode::BlockAttention:
+                BlockAttentionUpdateCuda(gl.d_current, gl.d_next, gl.d_heatData,
+                    gl.d_blockRep, gl.d_blockAttn, gl.d_blockQ, gl.d_blockK, gl.d_blockV,
+                    gl.simW, gl.simH, io.DeltaTime, false, trailDecay,
+                    attnParams.lambda_distance, attnParams.lambda_state,
+                    attnParams.lambda_block, attnParams.sigma, attnParams.blockSize);
+                break;
+            case SimMode::FullAttention:
+                FullAttentionUpdateCuda(gl.d_current, gl.d_next, gl.d_heatData,
+                    gl.d_Q, gl.d_K, gl.d_V, gl.d_attnScores, gl.d_attnOut,
+                    gl.simW, gl.simH, io.DeltaTime, false, trailDecay, attnParams);
+                break;
+            }
+            cudaMemcpy(gl.d_current, gl.d_next, (size_t)gl.simW * gl.simH * sizeof(float), cudaMemcpyDeviceToDevice);
             logicStepPerformed = true;
 
             if (generation % 10 == 0) {
-                population = GetPopulationCuda(gl.d_current, gl.simW, gl.simH);
+                population = GetPopulationCudaFloat(gl.d_current, gl.simW, gl.simH);
             }
         }
     }
 
     if (!logicStepPerformed) {
-        UpdateLifeCuda(gl.d_current, gl.d_next, gl.d_heatData, gl.simW, gl.simH, io.DeltaTime,
-            true, trailDecay, rules[currentRuleIdx].b, rules[currentRuleIdx].s);
+        // paused 时只更新热力图（所有模式共用经典 kernel 的 paused 路径）
+        ClassicUpdateCuda(gl.d_current, gl.d_next, gl.d_heatData,
+            gl.simW, gl.simH, io.DeltaTime, true, trailDecay,
+            rules[currentRuleIdx].b, rules[currentRuleIdx].s);
     }
 
     static float maxPopFound = 1000.0f;
