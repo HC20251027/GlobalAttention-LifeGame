@@ -1641,6 +1641,75 @@ void ReallocateSimulation(GLHandles& gl, int newW, int newH) {
     cudaDeviceSynchronize();
 }
 
+// 模式切换时的 pending 状态
+static SimMode pendingModeSwitch = SimMode::Classic;
+
+// 模式切换辅助函数：释放/分配模式专用缓冲区
+void SwitchSimMode(GLHandles& gl, SimMode newMode, AttentionParams& params) {
+    if (newMode == gl.currentMode) return;
+
+    // 释放旧模式专用缓冲区
+    auto SafeFreeFloat = [](float** ptr) { if (*ptr) { cudaFree(*ptr); *ptr = nullptr; } };
+
+    // 释放所有模式专用缓冲区（统一释放，简化逻辑）
+    SafeFreeFloat(&gl.d_globalStats);
+    SafeFreeFloat(&gl.d_blockRep);
+    SafeFreeFloat(&gl.d_blockAttn);
+    SafeFreeFloat(&gl.d_blockQ);
+    SafeFreeFloat(&gl.d_blockK);
+    SafeFreeFloat(&gl.d_blockV);
+    SafeFreeFloat(&gl.d_Q);
+    SafeFreeFloat(&gl.d_K);
+    SafeFreeFloat(&gl.d_V);
+    SafeFreeFloat(&gl.d_attnScores);
+    SafeFreeFloat(&gl.d_attnOut);
+
+    // 检查规模限制并调整
+    SimModeLimits limits = GetSimModeLimits(newMode);
+    int newW = std::min(gl.simW, limits.maxW);
+    int newH = std::min(gl.simH, limits.maxH);
+
+    if (newW != gl.simW || newH != gl.simH) {
+        ReallocateSimulation(gl, newW, newH);
+    }
+
+    // 分配新模式专用缓冲区
+    int n = gl.simW * gl.simH;
+    switch (newMode) {
+    case SimMode::GlobalStats:
+        cudaMalloc(&gl.d_globalStats, 5 * sizeof(float));
+        break;
+    case SimMode::BlockAttention: {
+        int B = params.blockSize;
+        int numBlocksX = (gl.simW + B - 1) / B;
+        int numBlocksY = (gl.simH + B - 1) / B;
+        int numBlocks = numBlocksX * numBlocksY;
+        cudaMalloc(&gl.d_blockRep, numBlocks * sizeof(float));
+        cudaMalloc(&gl.d_blockAttn, (size_t)numBlocks * numBlocks * sizeof(float));
+        cudaMalloc(&gl.d_blockQ, numBlocks * sizeof(float));
+        cudaMalloc(&gl.d_blockK, numBlocks * sizeof(float));
+        cudaMalloc(&gl.d_blockV, numBlocks * sizeof(float));
+        break;
+    }
+    case SimMode::FullAttention: {
+        int d = params.featureDim;
+        cudaMalloc(&gl.d_Q, (size_t)n * d * sizeof(float));
+        cudaMalloc(&gl.d_K, (size_t)n * d * sizeof(float));
+        cudaMalloc(&gl.d_V, (size_t)n * d * sizeof(float));
+        cudaMalloc(&gl.d_attnScores, (size_t)n * sizeof(float)); // 分块使用
+        cudaMalloc(&gl.d_attnOut, (size_t)n * d * sizeof(float));
+        break;
+    }
+    default:
+        break; // Classic 不需要额外缓冲区
+    }
+
+    cudaDeviceSynchronize();
+    gl.currentMode = newMode;
+    std::cout << "[模式切换] -> " << SimModeName(newMode)
+              << " (网格: " << gl.simW << "x" << gl.simH << ")" << std::endl;
+}
+
 void RenderLifeGameScreen_GPU(SimState& state, int winW, int winH, GLHandles& gl, const GpuInfo& info) {
     ImGuiIO& io = ImGui::GetIO();
     const float scale = (float)winW / 1920.0f;
@@ -1965,10 +2034,85 @@ void RenderLifeGameScreen_GPU(SimState& state, int winW, int winH, GLHandles& gl
                             bool is_selected = (currentRuleIdx == i);
                             if (ImGui::Selectable(rules[i].name, is_selected)) {
                                 currentRuleIdx = i;
-                                SeedCudaLife(gl.d_current, gl.simW, gl.simH, 0.2f);
+                                SeedCudaLifeFloat(gl.d_current, gl.simW, gl.simH, 0.2f);
                             }
                         }
                         ImGui::EndCombo();
+                    }
+                    ImGui::Separator();
+
+                    // ============================================================
+                    // 演化模式选择器
+                    // ============================================================
+                    ImGui::TextColored(coreColor, "SIMULATION_MODE");
+                    const char* modeNames[] = {
+                        "经典生命游戏",
+                        "全局统计量注入",
+                        "分块窗口注意力",
+                        "精确全局注意力"
+                    };
+                    int currentModeInt = (int)gl.currentMode;
+                    if (ImGui::BeginCombo("##Mode", modeNames[currentModeInt])) {
+                        for (int i = 0; i < 4; i++) {
+                            bool is_selected = (currentModeInt == i);
+                            if (ImGui::Selectable(modeNames[i], is_selected)) {
+                                SimMode newMode = (SimMode)i;
+                                if (newMode != gl.currentMode) {
+                                    // 检查规模限制
+                                    SimModeLimits limits = GetSimModeLimits(newMode);
+                                    if (gl.simW > limits.maxW || gl.simH > limits.maxH) {
+                                        // 自动调整网格大小
+                                        int newW = std::min(gl.simW, limits.maxW);
+                                        int newH = std::min(gl.simH, limits.maxH);
+                                        ReallocateSimulation(gl, newW, newH);
+                                        inputW = newW;
+                                        inputH = newH;
+                                    }
+                                    SwitchSimMode(gl, newMode, attnParams);
+                                }
+                            }
+                            if (is_selected) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    // 规模限制提示
+                    {
+                        SimModeLimits limits = GetSimModeLimits(gl.currentMode);
+                        ImGui::TextDisabled("Limit: %s", limits.description);
+                    }
+
+                    // 模式参数面板
+                    if (gl.currentMode == SimMode::GlobalStats) {
+                        ImGui::SliderFloat("局部权重 w_local", &attnParams.w_local, 0.0f, 1.0f);
+                        ImGui::SliderFloat("全局权重 w_global", &attnParams.w_global, 0.0f, 1.0f);
+                        ImGui::SliderFloat("阈值 threshold", &attnParams.threshold, 0.0f, 1.0f);
+                    }
+                    else if (gl.currentMode == SimMode::BlockAttention) {
+                        ImGui::SliderFloat("距离权重 λ_d", &attnParams.lambda_distance, 0.0f, 2.0f);
+                        ImGui::SliderFloat("状态权重 λ_s", &attnParams.lambda_state, 0.0f, 2.0f);
+                        ImGui::SliderFloat("块间权重 λ_b", &attnParams.lambda_block, 0.0f, 2.0f);
+                        ImGui::SliderFloat("衰减 σ", &attnParams.sigma, 0.1f, 10.0f);
+                        ImGui::SliderInt("块大小 B", &attnParams.blockSize, 8, 64);
+                    }
+                    else if (gl.currentMode == SimMode::FullAttention) {
+                        ImGui::SliderInt("特征维度 d", &attnParams.featureDim, 1, 16);
+                        ImGui::SliderFloat("偏置 bias", &attnParams.bias, -1.0f, 1.0f);
+                        if (ImGui::Button("重新初始化权重")) {
+                            // 重新生成随机权重
+                            unsigned int seed = (unsigned int)time(NULL);
+                            auto pr = [&seed]() -> float {
+                                seed = seed * 747796405U + 2891336453U;
+                                return ((float)(seed & 0xFFFF) / 65536.0f) - 0.5f;
+                            };
+                            for (int i = 0; i < 48; i++) {
+                                attnParams.W_q[i] = pr() * 0.1f;
+                                attnParams.W_k[i] = pr() * 0.1f;
+                                attnParams.W_v[i] = pr() * 0.1f;
+                            }
+                            for (int i = 0; i < 16; i++) {
+                                attnParams.W_o[i] = pr() * 0.1f;
+                            }
+                        }
                     }
                     ImGui::Separator();
 
