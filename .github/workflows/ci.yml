@@ -28,17 +28,119 @@ jobs:
           libsdl2-dev \
           pkg-config
     
+    - name: Create Linux CMakeLists.txt
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: |
+        cat > CMakeLists.txt.ci << 'EOF'
+        cmake_minimum_required(VERSION 3.18)
+        
+        set(CMAKE_CUDA_ARCHITECTURES 60 70 80 89 90)
+        project(CMakePro_CUDA_LifeGame_V2 LANGUAGES CXX C CUDA)
+        
+        set(TARGET_NAME "CMakePro_CUDA_LifeGame_V2")
+        
+        # 使用系统默认路径
+        find_package(OpenGL REQUIRED)
+        find_package(glfw3 REQUIRED)
+        find_package(GLEW REQUIRED)
+        find_package(SDL2 REQUIRED)
+        find_package(CUDA REQUIRED)
+        
+        # ImGui & ImPlot
+        file(GLOB IMGUIDocking_SRCS
+            "ImGui_docking/*.cpp"
+            "ImPlot/*.cpp"
+        )
+        
+        # CUDA 核函数文件
+        set(CUDA_KERNEL_SOURCES
+            "CUDA_Kernels/Cuda_Check.cu"
+            "CUDA_Kernels/Cuda_Classic.cu"
+            "CUDA_Kernels/Cuda_GlobalStats.cu"
+            "CUDA_Kernels/Cuda_BlockAttention.cu"
+            "CUDA_Kernels/Cuda_FullAttention.cu"
+        )
+        set(CUDA_KERNEL_HEADERS
+            "CUDA_Kernels/Cuda_Check.cuh"
+            "CUDA_Kernels/Cuda_Classic.cuh"
+            "CUDA_Kernels/Cuda_GlobalStats.cuh"
+            "CUDA_Kernels/Cuda_BlockAttention.cuh"
+            "CUDA_Kernels/Cuda_FullAttention.cuh"
+        )
+        
+        set(PROJECT_SRCS "Main_cpp/CMakePro_cuda.cpp")
+        set(STB_SRCS "stb_image/stb_image_write.h")
+        
+        add_executable(${TARGET_NAME}
+            ${IMGUIDocking_SRCS}
+            ${STB_SRCS}
+            ${PROJECT_SRCS} 
+            ${CUDA_KERNEL_SOURCES}
+            ${CUDA_KERNEL_HEADERS}
+            "Main_header/Common.h"
+            "Main_header/AttentionParams.h"
+        )
+        
+        set_target_properties(${TARGET_NAME} PROPERTIES
+            CXX_STANDARD 20
+            CXX_STANDARD_REQUIRED ON
+            CUDA_STANDARD 17
+        )
+        
+        target_compile_options(${TARGET_NAME} PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:
+                --use_fast_math
+                -Xcompiler=-Wall
+            >
+        )
+        
+        # 资源文件同步
+        set(RESOURCE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources_LifeGame_V2")
+        set(RESOURCE_DEST_DIR "${CMAKE_BINARY_DIR}/resources_LifeGame_V2")
+        file(GLOB_RECURSE RESOURCE_FILES "${RESOURCE_SRC_DIR}/*")
+        
+        add_custom_target(copy_resources_LifeGame_V2
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${RESOURCE_SRC_DIR} ${RESOURCE_DEST_DIR}
+            DEPENDS ${RESOURCE_FILES}
+            COMMENT "Syncing resource files..."
+        )
+        add_dependencies(${TARGET_NAME} copy_resources_LifeGame_V2)
+        
+        target_include_directories(${TARGET_NAME} PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/Main_header"
+            "${CMAKE_CURRENT_SOURCE_DIR}/ImGui_docking"
+            "${CMAKE_CURRENT_SOURCE_DIR}/ImPlot"
+            "${CMAKE_CURRENT_SOURCE_DIR}/stb_image"
+            "${CMAKE_CURRENT_SOURCE_DIR}/CUDA_Kernels"
+            ${OPENGL_INCLUDE_DIRS}
+            ${GLEW_INCLUDE_DIRS}
+            ${SDL2_INCLUDE_DIRS}
+        )
+        
+        target_compile_definitions(${TARGET_NAME} PRIVATE GLEW_STATIC)
+        
+        target_link_libraries(${TARGET_NAME} PRIVATE
+            OpenGL::GL
+            glfw
+            GLEW::GLEW
+            SDL2::SDL2
+            ${CUDA_LIBRARIES}
+            cudart
+            cuda
+        )
+        
+        source_group("Source Files\\CUDA" FILES ${CUDA_KERNEL_SOURCES} ${CUDA_KERNEL_HEADERS})
+        source_group("Source Files\\ImGui" FILES ${IMGUIDocking_SRCS})
+        EOF
+        mv CMakeLists.txt CMakeLists.txt.original
+        mv CMakeLists.txt.ci CMakeLists.txt
+    
     - name: Configure CMake
       working-directory: CMakePro_CUDA_LifeGame_V2
       run: |
         mkdir -p build
         cd build
-        cmake .. \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90" \
-          -DLIB_ROOT=/usr \
-          -DOPENGL_ROOT=/usr \
-          -DSDL2_ROOT=/usr
+        cmake .. -DCMAKE_BUILD_TYPE=Release
     
     - name: Build
       working-directory: CMakePro_CUDA_LifeGame_V2/build
@@ -69,11 +171,9 @@ jobs:
       with:
         cuda: '12.3.0'
     
-    - name: Setup GLFW
+    - name: Setup vcpkg
       run: |
         vcpkg install glfw3:x64-windows glew:x64-windows sdl2:x64-windows
-      env:
-        VCPKG_DEFAULT_BINARY_DIR: ${{ github.workspace }}/vcpkg-bin
     
     - name: Configure CMake
       working-directory: CMakePro_CUDA_LifeGame_V2
@@ -85,7 +185,7 @@ jobs:
           -A x64 `
           -DCMAKE_BUILD_TYPE=Release `
           -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90" `
-          -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake"
     
     - name: Build
       working-directory: CMakePro_CUDA_LifeGame_V2/build
@@ -100,8 +200,6 @@ jobs:
 
   code-quality:
     runs-on: ubuntu-latest
-    container:
-      image: nvidia/cuda:12.3.0-devel-ubuntu22.04
     
     steps:
     - name: Checkout repository
@@ -109,22 +207,17 @@ jobs:
     
     - name: Install clang-format
       run: |
-        apt-get update
-        apt-get install -y clang-format
+        apt-get update && apt-get install -y clang-format
     
     - name: Check code formatting
       run: |
         echo "Checking code formatting..."
         find CMakePro_CUDA_LifeGame_V2 -name "*.cpp" -o -name "*.h" -o -name "*.cu" -o -name "*.cuh" | head -20
-        # Optional: Add clang-format check
-        # clang-format --dry-run --Werror $(find . -name "*.cpp" -o -name "*.h" -o -name "*.cu" -o -name "*.cuh")
     
     - name: Static analysis
       run: |
         echo "Static analysis placeholder - configure as needed"
-        # Add clang-tidy or other static analysis tools here
 
-  # Summary job that requires all build jobs to pass
   ci-success:
     needs: [build-linux, build-windows, code-quality]
     runs-on: ubuntu-latest
