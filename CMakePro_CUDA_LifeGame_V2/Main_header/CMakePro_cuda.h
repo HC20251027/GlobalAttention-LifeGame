@@ -175,7 +175,7 @@ inline void Init_Imgui(GLFWwindow* window) {
 }
 // 绘制欢迎/登录界面
 // 辅助函数：将 HSV 转为 ImU32 格式
-ImU32 GetColorFromHSV(float h, float s, float v, float a) {
+inline ImU32 GetColorFromHSV(float h, float s, float v, float a) {
     float r, g, b;
     ImGui::ColorConvertHSVtoRGB(h, s, v, r, g, b);
     return ImGui::ColorConvertFloat4ToU32(ImVec4(r, g, b, a));
@@ -3051,7 +3051,7 @@ inline void RenderCudaDiagnosticsScreen(SimState& state, const GpuInfo& info, in
     ImGui::PopStyleColor(2); // 对应 WindowBg, Border
 }
 
-bool IsIntroScreen(AppScreen screen) {
+inline bool IsIntroScreen(AppScreen screen) {
     return (screen == AppScreen::Intro0 || screen == AppScreen::Intro1 
          || screen == AppScreen::Intro2 );
 }
