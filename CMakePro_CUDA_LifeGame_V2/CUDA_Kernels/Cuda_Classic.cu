@@ -8,7 +8,7 @@
 // ============================================================================
 // 无状态哈希随机数引擎（与原项目一致）
 // ============================================================================
-__device__ float GetRandomFloatStateless(unsigned int index, unsigned int seed) {
+__device__ __forceinline__ float GetRandomFloatStateless(unsigned int index, unsigned int seed) {
     unsigned int state = index * 747796405U + 2891336453U + seed;
     unsigned int word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     unsigned int result = (word >> 22u) ^ word;

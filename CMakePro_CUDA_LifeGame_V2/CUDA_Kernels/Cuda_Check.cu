@@ -94,7 +94,7 @@ extern "C" bool RunCudaTest(float* h_a, float* h_b, float* h_c, int n) {
 // ============================================================================
 
 // 高效 PCG 32 哈希，可在 GPU 寄存器内直接高随机度打散输入 seed
-__device__ float GetRandomFloatStateless(unsigned int index, unsigned int seed) {
+__device__ __forceinline__ float GetRandomFloatStateless(unsigned int index, unsigned int seed) {
     unsigned int state = index * 747796405U + 2891336453U + seed;
     unsigned int word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
     unsigned int result = (word >> 22u) ^ word;
