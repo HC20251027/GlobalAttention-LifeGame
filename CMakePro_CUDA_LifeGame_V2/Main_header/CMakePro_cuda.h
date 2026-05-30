@@ -3159,6 +3159,20 @@ void cleanup(GLHandles& gl) {
         gl.d_heatData = nullptr;
     }
 
+    // 释放全局注意力模式专用缓冲区
+    auto SafeFreeFloat = [](float** ptr) { if (*ptr) { cudaFree(*ptr); *ptr = nullptr; } };
+    SafeFreeFloat(&gl.d_globalStats);
+    SafeFreeFloat(&gl.d_blockRep);
+    SafeFreeFloat(&gl.d_blockAttn);
+    SafeFreeFloat(&gl.d_blockQ);
+    SafeFreeFloat(&gl.d_blockK);
+    SafeFreeFloat(&gl.d_blockV);
+    SafeFreeFloat(&gl.d_Q);
+    SafeFreeFloat(&gl.d_K);
+    SafeFreeFloat(&gl.d_V);
+    SafeFreeFloat(&gl.d_attnScores);
+    SafeFreeFloat(&gl.d_attnOut);
+
     // --- 3. 清理 OpenGL 纹理 ---
     if (gl.lifeTex) {
         glDeleteTextures(1, &gl.lifeTex);
