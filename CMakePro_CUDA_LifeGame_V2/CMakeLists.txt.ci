@@ -11,14 +11,9 @@ set(TARGET_NAME "CMakePro_CUDA_LifeGame_V2")
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(GLEW REQUIRED)
-
-# SDL2 在 Ubuntu 上需要特殊处理
-find_package(SDL2 QUIET)
-if(NOT SDL2_FOUND)
-    # 尝试使用 PkgConfig
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(SDL2 REQUIRED sdl2)
-endif()
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SDL2 REQUIRED sdl2)
+find_package(CUDAToolkit REQUIRED)
 
 # ImGui & ImPlot
 file(GLOB IMGUIDocking_SRCS
@@ -34,13 +29,6 @@ set(CUDA_KERNEL_SOURCES
     "CUDA_Kernels/Cuda_BlockAttention.cu"
     "CUDA_Kernels/Cuda_FullAttention.cu"
 )
-set(CUDA_KERNEL_HEADERS
-    "CUDA_Kernels/Cuda_Check.cuh"
-    "CUDA_Kernels/Cuda_Classic.cuh"
-    "CUDA_Kernels/Cuda_GlobalStats.cuh"
-    "CUDA_Kernels/Cuda_BlockAttention.cuh"
-    "CUDA_Kernels/Cuda_FullAttention.cuh"
-)
 
 set(PROJECT_SRCS "Main_cpp/CMakePro_cuda.cpp")
 
@@ -48,9 +36,6 @@ add_executable(${TARGET_NAME}
     ${IMGUIDocking_SRCS}
     ${PROJECT_SRCS}
     ${CUDA_KERNEL_SOURCES}
-    ${CUDA_KERNEL_HEADERS}
-    "Main_header/Common.h"
-    "Main_header/AttentionParams.h"
 )
 
 set_target_properties(${TARGET_NAME} PROPERTIES
@@ -61,20 +46,15 @@ set_target_properties(${TARGET_NAME} PROPERTIES
 
 # CUDA 编译选项
 target_compile_options(${TARGET_NAME} PRIVATE
-    $<$<COMPILE_LANGUAGE:CUDA>:
-        --use_fast_math
-    >
+    $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>
 )
 
 # 资源文件同步
 set(RESOURCE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources_LifeGame_V2")
 set(RESOURCE_DEST_DIR "${CMAKE_BINARY_DIR}/resources_LifeGame_V2")
 
-file(GLOB_RECURSE RESOURCE_FILES "${RESOURCE_SRC_DIR}/*")
-
 add_custom_target(copy_resources_LifeGame_V2
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${RESOURCE_SRC_DIR} ${RESOURCE_DEST_DIR}
-    DEPENDS ${RESOURCE_FILES}
     COMMENT "Syncing resource files..."
 )
 add_dependencies(${TARGET_NAME} copy_resources_LifeGame_V2)
@@ -86,6 +66,7 @@ target_include_directories(${TARGET_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/ImPlot"
     "${CMAKE_CURRENT_SOURCE_DIR}/stb_image"
     "${CMAKE_CURRENT_SOURCE_DIR}/CUDA_Kernels"
+    ${SDL2_INCLUDE_DIRS}
 )
 
 # 链接库
@@ -93,16 +74,6 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     OpenGL::GL
     glfw
     GLEW::GLEW
+    CUDA::cudart
+    ${SDL2_LIBRARIES}
 )
-
-# CUDA 链接
-find_package(CUDAToolkit REQUIRED)
-target_link_libraries(${TARGET_NAME} PRIVATE CUDA::cudart)
-
-# SDL2 链接
-if(TARGET SDL2::SDL2)
-    target_link_libraries(${TARGET_NAME} PRIVATE SDL2::SDL2)
-elseif(SDL2_LIBRARIES)
-    target_include_directories(${TARGET_NAME} PRIVATE ${SDL2_INCLUDE_DIRS})
-    target_link_libraries(${TARGET_NAME} PRIVATE ${SDL2_LIBRARIES})
-endif()
