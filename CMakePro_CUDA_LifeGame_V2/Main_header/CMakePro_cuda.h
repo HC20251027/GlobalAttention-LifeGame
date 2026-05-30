@@ -27,7 +27,7 @@
 
 constexpr float PI = 3.14159265358979323846f;
 
-void SetupImGuiStyle() {
+inline void SetupImGuiStyle() {
     ImGuiStyle& style = ImGui::GetStyle();
 
     // ==========================================================
@@ -123,7 +123,7 @@ void SetupImGuiStyle() {
     colors[ImGuiCol_PlotHistogramHovered] = accentHover;
 }
 
-void Init_Imgui(GLFWwindow* window) {
+inline void Init_Imgui(GLFWwindow* window) {
     // 1. 检查版本并创建上下文
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -1190,7 +1190,7 @@ void RenderIntroScreen2(SimState& state, int winW, int winH, bool& isIntroMode, 
 }
 
 //界面3,生命游戏渲染CPU
-void ApplyPattern(std::vector<uint8_t>& world, int w, int h, int type, int& gen) {
+inline void ApplyPattern(std::vector<uint8_t>& world, int w, int h, int type, int& gen) {
     std::fill(world.begin(), world.end(), 0);
     gen = 0;
     auto place = [&](int x, int y, std::vector<std::vector<int>> p) {
@@ -1234,7 +1234,7 @@ void ApplyPattern(std::vector<uint8_t>& world, int w, int h, int type, int& gen)
     }
 }
 
-void RenderLifeGameScreen(SimState& state, int winW, int winH) {
+inline void RenderLifeGameScreen(SimState& state, int winW, int winH) {
     const float scale = (float)winW / 1920.0f;
     ImGuiIO& io = ImGui::GetIO();
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
@@ -1580,7 +1580,7 @@ void RenderLifeGameScreen(SimState& state, int winW, int winH) {
 }
 
 //GPU版本生命游戏
-void ReallocateSimulation(GLHandles& gl, int newW, int newH) {
+inline void ReallocateSimulation(GLHandles& gl, int newW, int newH) {
     // 1. 同步 GPU，确保当前没有任务在跑
     glFinish();
     cudaDeviceSynchronize();
@@ -1645,7 +1645,7 @@ void ReallocateSimulation(GLHandles& gl, int newW, int newH) {
 static SimMode pendingModeSwitch = SimMode::Classic;
 
 // 模式切换辅助函数：释放/分配模式专用缓冲区
-void SwitchSimMode(GLHandles& gl, SimMode newMode, AttentionParams& params) {
+inline void SwitchSimMode(GLHandles& gl, SimMode newMode, AttentionParams& params) {
     if (newMode == gl.currentMode) return;
 
     // 释放旧模式专用缓冲区
@@ -1710,7 +1710,7 @@ void SwitchSimMode(GLHandles& gl, SimMode newMode, AttentionParams& params) {
               << " (网格: " << gl.simW << "x" << gl.simH << ")" << std::endl;
 }
 
-void RenderLifeGameScreen_GPU(SimState& state, int winW, int winH, GLHandles& gl, const GpuInfo& info) {
+inline void RenderLifeGameScreen_GPU(SimState& state, int winW, int winH, GLHandles& gl, const GpuInfo& info) {
     ImGuiIO& io = ImGui::GetIO();
     const float scale = (float)winW / 1920.0f;
 
@@ -2469,7 +2469,7 @@ void RenderLifeGameScreen_GPU(SimState& state, int winW, int winH, GLHandles& gl
 }
 
 //界面4,HAM 界面设计
-void RenderHamStationScreen(SimState& state, int winW, int winH) {
+inline void RenderHamStationScreen(SimState& state, int winW, int winH) {
     float scale = (float)winW / 1920.0f;
     double t = ImGui::GetTime();
     ImGuiIO& io = ImGui::GetIO();
@@ -2907,7 +2907,7 @@ void RenderHamStationScreen(SimState& state, int winW, int winH) {
 }
 
 //GPU信息界面
-void RenderCudaDiagnosticsScreen(SimState& state, const GpuInfo& info, int winW, int winH) {
+inline void RenderCudaDiagnosticsScreen(SimState& state, const GpuInfo& info, int winW, int winH) {
     const float scale = (float)winW / 1920.0f;
     ImGuiIO& io = ImGui::GetIO();
     ImDrawList* draw = ImGui::GetBackgroundDrawList();
@@ -3056,7 +3056,7 @@ bool IsIntroScreen(AppScreen screen) {
          || screen == AppScreen::Intro2 );
 }
 
-void RenderApp(AppScreen screen, SimState& state, const GpuInfo& info, int winW, int winH, GLHandles& gl, AsyncLoader& loader) {
+inline void RenderApp(AppScreen screen, SimState& state, const GpuInfo& info, int winW, int winH, GLHandles& gl, AsyncLoader& loader) {
 
     switch (screen) {
     case AppScreen::Intro0:
@@ -3085,7 +3085,7 @@ void RenderApp(AppScreen screen, SimState& state, const GpuInfo& info, int winW,
     }
 }
 
-void CycleScreens(SimState& state) {
+inline void CycleScreens(SimState& state) {
     // 自动根据枚举数量轮换，无需手动修改数字
     int total = static_cast<int>(AppScreen::Count); // 假设你在末尾加了 Count
     int next = (static_cast<int>(state.currentScreen) + 1) % total;
@@ -3095,7 +3095,7 @@ void CycleScreens(SimState& state) {
     std::cout << "Switched to screen index: " << next << std::endl;
 }
 //检查是否有操作
-void CheckIdleStatus(GLFWwindow* window, SimState& state) {
+inline void CheckIdleStatus(GLFWwindow* window, SimState& state) {
     double currentTime = glfwGetTime();
     bool inputDetected = false;
 
@@ -3137,7 +3137,7 @@ void CheckIdleStatus(GLFWwindow* window, SimState& state) {
 }
 
 //资源清理
-void cleanup(GLHandles& gl) {
+inline void cleanup(GLHandles& gl) {
     // --- 1. 注销 CUDA 与 OpenGL 的互操作资源 ---
     if (gl.cudaRes) {
         // 在删除 OpenGL 纹理之前，必须先注销注册的资源
@@ -3200,7 +3200,7 @@ void cleanup(GLHandles& gl) {
 }
 
 //处理键盘操作
-void ProcessInput(GLFWwindow* window, SimConfig& cfg, SimState& state, GLHandles& gl) {
+inline void ProcessInput(GLFWwindow* window, SimConfig& cfg, SimState& state, GLHandles& gl) {
     if (!ImGui::GetIO().WantTextInput) {
         if (ImGui::IsKeyPressed(ImGuiKey_Tab, false)) {
             CycleScreens(state);
