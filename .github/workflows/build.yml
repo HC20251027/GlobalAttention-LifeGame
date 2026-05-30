@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: nvidia/cuda:12.3.0-devel-ubuntu22.04
-      options: --gpus all
     
     steps:
     - uses: actions/checkout@v4
