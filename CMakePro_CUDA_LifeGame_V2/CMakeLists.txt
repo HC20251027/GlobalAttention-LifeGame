@@ -36,8 +36,20 @@ file(GLOB IMGUIDocking_SRCS
 )
 
 # CUDA 核函数文件
-file(GLOB CUDA_USER_SOURCES "CUDA_Kernels/Cuda_Check.cu")
-file(GLOB CUDA_USER_HEADERS "CUDA_Kernels/Cuda_Check.cuh")
+set(CUDA_KERNEL_SOURCES
+    "CUDA_Kernels/Cuda_Check.cu"
+    "CUDA_Kernels/Cuda_Classic.cu"
+    "CUDA_Kernels/Cuda_GlobalStats.cu"
+    "CUDA_Kernels/Cuda_BlockAttention.cu"
+    "CUDA_Kernels/Cuda_FullAttention.cu"
+)
+set(CUDA_KERNEL_HEADERS
+    "CUDA_Kernels/Cuda_Check.cuh"
+    "CUDA_Kernels/Cuda_Classic.cuh"
+    "CUDA_Kernels/Cuda_GlobalStats.cuh"
+    "CUDA_Kernels/Cuda_BlockAttention.cuh"
+    "CUDA_Kernels/Cuda_FullAttention.cuh"
+)
 
 # 项目主源文件
 set(PROJECT_SRCS "Main_cpp/CMakePro_cuda.cpp")
@@ -52,9 +64,10 @@ add_executable(${TARGET_NAME}
     ${IMGUIDocking_SRCS}
     ${STB_SRCS}
     ${PROJECT_SRCS} 
-    ${CUDA_USER_SOURCES}
-    ${CUDA_USER_HEADERS}
+    ${CUDA_KERNEL_SOURCES}
+    ${CUDA_KERNEL_HEADERS}
     "Main_header/Common.h"
+    "Main_header/AttentionParams.h"
 )
 
 # ==========================================
@@ -154,5 +167,5 @@ target_link_libraries(${TARGET_NAME} PRIVATE
 # ==========================================
 # 10. IDE 视图美化 (可选)
 # ==========================================
-source_group("Source Files\\CUDA" FILES ${CUDA_USER_SOURCES} ${CUDA_USER_HEADERS})
+source_group("Source Files\\CUDA" FILES ${CUDA_KERNEL_SOURCES} ${CUDA_KERNEL_HEADERS})
 source_group("Source Files\\ImGui" FILES ${IMGUIDocking_SRCS})
