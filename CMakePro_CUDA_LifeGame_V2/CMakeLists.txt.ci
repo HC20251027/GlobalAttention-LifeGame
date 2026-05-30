@@ -53,8 +53,8 @@ target_compile_options(${TARGET_NAME} PRIVATE
 set(RESOURCE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources_LifeGame_V2")
 set(RESOURCE_DEST_DIR "${CMAKE_BINARY_DIR}/resources_LifeGame_V2")
 
-add_custom_target(copy_resources_LifeGame_V2
-    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${RESOURCE_SRC_DIR} ${RESOURCE_DEST_DIR}
+add_custom_target(copy_resources_LifeGame_V2 ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${RESOURCE_SRC_DIR} ${RESOURCE_DEST_DIR}
     COMMENT "Syncing resource files..."
 )
 add_dependencies(${TARGET_NAME} copy_resources_LifeGame_V2)

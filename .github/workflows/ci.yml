@@ -3,66 +3,101 @@ name: CI
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   pull_request:
     branches: [main, master]
   workflow_dispatch:
 
+env:
+  BUILD_TYPE: Release
+
 jobs:
-  validate:
-    runs-on: ubuntu-latest
+  build-linux:
+    runs-on: ubuntu-22.04
+    container:
+      image: nvidia/cuda:12.3.0-devel-ubuntu22.04
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Verify project structure
+    - name: Install dependencies
       run: |
-        echo "=== Project Structure Verification ==="
-        
-        required_files=(
+        apt-get update
+        apt-get install -y \
+          cmake \
+          ninja-build \
+          libglfw3-dev \
+          libglew-dev \
+          libsdl2-dev \
+          libglm-dev \
+          pkg-config
+    
+    - name: Setup CMakeLists for CI
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: cp CMakeLists.txt.ci CMakeLists.txt
+    
+    - name: Configure
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: |
+        cmake -B build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90"
+    
+    - name: Build
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} -j$(nproc)
+    
+    - name: Prepare package
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: |
+        mkdir -p package
+        cp build/CMakePro_CUDA_LifeGame_V2 package/
+        cp -r resources_LifeGame_V2 package/
+        tar -czf GlobalAttention-LifeGame-linux-x64.tar.gz -C package .
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-build
+        path: CMakePro_CUDA_LifeGame_V2/GlobalAttention-LifeGame-linux-x64.tar.gz
+        retention-days: 7
+
+  validate-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Validate project structure
+      shell: pwsh
+      run: |
+        $required = @(
           "CMakePro_CUDA_LifeGame_V2/CMakeLists.txt"
-          "CMakePro_CUDA_LifeGame_V2/CMakeLists.txt.ci"
           "CMakePro_CUDA_LifeGame_V2/Main_cpp/CMakePro_cuda.cpp"
           "CMakePro_CUDA_LifeGame_V2/Main_header/Common.h"
           "CMakePro_CUDA_LifeGame_V2/Main_header/AttentionParams.h"
           "CMakePro_CUDA_LifeGame_V2/Main_header/CMakePro_cuda.h"
         )
-        
-        for file in "${required_files[@]}"; do
-          if [ -f "$file" ]; then
-            echo "✓ $file"
-          else
-            echo "✗ $file MISSING"
-            exit 1
-          fi
-        done
-        
-        echo ""
-        echo "CUDA Kernels:"
-        for cu in CMakePro_CUDA_LifeGame_V2/CUDA_Kernels/*.cu; do
-          echo "✓ $(basename $cu)"
-        done
-        
-        echo ""
-        echo "✅ All files verified"
-    
-    - name: Check CUDA kernel syntax
-      run: |
-        echo "=== CUDA Kernel Syntax Check ==="
-        echo "Kernel declarations:"
-        grep -rn "__global__" CMakePro_CUDA_LifeGame_V2/CUDA_Kernels/*.cu | wc -l
-        echo "kernels found"
-        
-        echo "Extern C exports:"
-        grep -rn 'extern "C"' CMakePro_CUDA_LifeGame_V2/CUDA_Kernels/*.cu | wc -l
-        echo "exports found"
-        
-        echo "✅ CUDA syntax check passed"
-    
-    - name: Verify pre-built executable exists
-      run: |
-        if [ -f "EXE/CMakePro_CUDA_LifeGame/CMakePro_CUDA_LifeGame_V2.exe" ]; then
-          echo "✅ Pre-built Windows executable found"
-          ls -lh EXE/CMakePro_CUDA_LifeGame/CMakePro_CUDA_LifeGame_V2.exe
-        else
-          echo "⚠️ No pre-built executable found"
-        fi
+        foreach ($f in $required) {
+          if (!(Test-Path $f)) { Write-Error "Missing: $f"; exit 1 }
+          Write-Host "✓ $f"
+        }
+        Write-Host "✅ Windows structure validated"
+
+  release:
+    needs: [build-linux, validate-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: artifacts/linux-build/*.tar.gz
+        generate_release_notes: true
+        fail_on_unmatched_files: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
