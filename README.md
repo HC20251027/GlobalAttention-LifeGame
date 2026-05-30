@@ -1,5 +1,3 @@
----
-
 # 🧬 全局注意力生命游戏 (Global Attention Life Game)
 
 > 基于 **CUDA + OpenGL 零拷贝互操作** 架构的高性能细胞自动机仿真系统  
