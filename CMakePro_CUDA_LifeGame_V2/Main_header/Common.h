@@ -404,15 +404,19 @@ inline void LoadRleToGpu(GLHandles& gl, const RlePattern& pattern, int offsetX, 
 
     // 2. 计算目标指针偏移位置
     // 在 1D 线性显存中找到 (offsetX, offsetY) 的起始字节地址
-    uint8_t* d_dest = gl.d_current + (size_t)offsetY * gl.simW + offsetX;
+    float* d_dest = gl.d_current + (size_t)offsetY * gl.simW + offsetX;
 
-    // 主机端源数据指针
-    const uint8_t* h_src = pattern.data.data();
+    // RLE 数据是 uint8_t，需要转换为 float 再拷贝
+    std::vector<float> h_floatData(pattern.data.size());
+    for (size_t i = 0; i < pattern.data.size(); i++) {
+        h_floatData[i] = (float)pattern.data[i];
+    }
+    const float* h_src = h_floatData.data();
 
     // 3. 执行高效 2D 显存拷贝 (Host to Device)
-    size_t dpitch = gl.simW * sizeof(uint8_t);      // 目标网格跨度（字节）
-    size_t spitch = pattern.width * sizeof(uint8_t); // 源图案跨度（字节）
-    size_t widthInBytes = copyW * sizeof(uint8_t);   // 实际拷贝矩阵的单行宽度
+    size_t dpitch = gl.simW * sizeof(float);      // 目标网格跨度（字节）
+    size_t spitch = pattern.width * sizeof(float); // 源图案跨度（字节）
+    size_t widthInBytes = copyW * sizeof(float);   // 实际拷贝矩阵的单行宽度
 
     cudaError_t err = cudaMemcpy2D(
         d_dest,             // 显存目的指针偏移
@@ -430,7 +434,7 @@ inline void LoadRleToGpu(GLHandles& gl, const RlePattern& pattern, int offsetX, 
     }
 
     // 4. 同步当前缓冲至下一帧，防止演化覆盖导致闪烁或撕裂
-    cudaMemcpy(gl.d_next, gl.d_current, (size_t)gl.simW * gl.simH, cudaMemcpyDeviceToDevice);
+    cudaMemcpy(gl.d_next, gl.d_current, (size_t)gl.simW * gl.simH * sizeof(float), cudaMemcpyDeviceToDevice);
 
     // 初始化热力图对应区域
     // （可选操作：如果想让新加入的飞船尾迹直接亮起，可以把 heatMap 对应位置设为 1.0f）
