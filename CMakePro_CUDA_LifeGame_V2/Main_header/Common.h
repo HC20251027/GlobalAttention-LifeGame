@@ -11,6 +11,37 @@
 #include <atomic>
 #include <mutex>
 #include "imgui.h"
+#include "AttentionParams.h"
+
+// ===================================================================
+// 演化模式枚举
+// ===================================================================
+enum class SimMode {
+    Classic = 0,        // 经典生命游戏（局部 8 邻居）
+    GlobalStats = 1,    // 全局统计量注入
+    BlockAttention = 2, // 分块窗口注意力
+    FullAttention = 3    // 精确全局注意力
+};
+
+inline const char* SimModeName(SimMode mode) {
+    switch (mode) {
+        case SimMode::Classic:       return "经典生命游戏";
+        case SimMode::GlobalStats:   return "全局统计量注入";
+        case SimMode::BlockAttention:return "分块窗口注意力";
+        case SimMode::FullAttention: return "精确全局注意力";
+        default:                    return "未知模式";
+    }
+}
+
+inline SimModeLimits GetSimModeLimits(SimMode mode) {
+    switch (mode) {
+        case SimMode::Classic:       return { 32768, 32768, "无限制" };
+        case SimMode::GlobalStats:   return { 32768, 32768, "无限制" };
+        case SimMode::BlockAttention:return { 4096,  4096,  "推荐 ≤ 4096×4096" };
+        case SimMode::FullAttention: return { 256,    256,   "强制 ≤ 256×256" };
+        default:                    return { 32768, 32768, "无限制" };
+    }
+}
 
 // ===================================================================
 // 1. 导航与界面枚举
@@ -93,13 +124,33 @@ struct GLHandles {
     cudaArray_t cudaArray = nullptr;
 
     // --- 4. CUDA 专用显存缓冲区 (Device Pointers) ---
-    // 为了效率，逻辑计算使用原始显存指针，计算后再拷贝到上面的纹理
-    uint8_t* d_current = nullptr;    // 当前代细胞状态 (0 或 1)
-    uint8_t* d_next = nullptr;       // 下一代细胞状态
-    float* d_heatData = nullptr;   // 显存中的热力值数组 (0.0f - 1.0f)
+    // 统一使用 float 双缓冲（兼容所有 4 种模式）
+    float* d_current = nullptr;     // 当前状态（0.0 或 1.0）
+    float* d_next = nullptr;        // 下一代状态
+    float* d_heatData = nullptr;    // 热力值数组（0.0f ~ 1.0f）
+
+    // 模式 2 专用：全局统计量 [total, mean, variance, cx, cy]
+    float* d_globalStats = nullptr;
+
+    // 模式 3 专用：分块注意力辅助缓冲区
+    float* d_blockRep = nullptr;    // 块代表向量
+    float* d_blockAttn = nullptr;   // 块间注意力矩阵
+    float* d_blockQ = nullptr;     // 块级 Query
+    float* d_blockK = nullptr;     // 块级 Key
+    float* d_blockV = nullptr;     // 块级 Value
+
+    // 模式 4 专用：精确注意力辅助缓冲区
+    float* d_Q = nullptr;          // 全局 Query (N × d)
+    float* d_K = nullptr;          // 全局 Key   (N × d)
+    float* d_V = nullptr;          // 全局 Value (N × d)
+    float* d_attnScores = nullptr; // 注意力得分（分块计算）
+    float* d_attnOut = nullptr;    // 注意力输出 (N × d)
 
     int simW = 1920;
     int simH = 1080;
+
+    // 当前演化模式
+    SimMode currentMode = SimMode::Classic;
 
 };
 
