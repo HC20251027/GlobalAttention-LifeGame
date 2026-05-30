@@ -84,19 +84,10 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Setup CUDA
-      id: cuda
       uses: Jimver/cuda-toolkit@v0.2.14
       with:
         cuda: '12.3.0'
         use-github-cache: true
-      continue-on-error: true
-    
-    - name: Check CUDA installation
-      if: steps.cuda.outcome == 'success'
-      shell: pwsh
-      run: |
-        nvcc --version
-        Get-Command nvcc
     
     - name: Setup vcpkg
       uses: lukka/run-vcpkg@v11
@@ -104,19 +95,16 @@ jobs:
         vcpkgGitCommitId: 'a42af01b72c28a8e1d7b48107b33e4f286a55ef6'
     
     - name: Install dependencies
-      if: steps.cuda.outcome == 'success'
       run: |
         vcpkg install glfw3:x64-windows glew:x64-windows sdl2:x64-windows glm:x64-windows
     
     - name: Setup CMakeLists for CI
-      if: steps.cuda.outcome == 'success'
       working-directory: CMakePro_CUDA_LifeGame_V2
       shell: pwsh
       run: |
         Copy-Item CMakeLists.txt.ci CMakeLists.txt -Force
     
     - name: Configure
-      if: steps.cuda.outcome == 'success'
       working-directory: CMakePro_CUDA_LifeGame_V2
       shell: cmd
       run: |
@@ -126,12 +114,10 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
     
     - name: Build
-      if: steps.cuda.outcome == 'success'
       working-directory: CMakePro_CUDA_LifeGame_V2
       run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
     
     - name: Prepare package
-      if: steps.cuda.outcome == 'success'
       working-directory: CMakePro_CUDA_LifeGame_V2
       shell: pwsh
       run: |
@@ -141,19 +127,11 @@ jobs:
         Compress-Archive -Path package\* -DestinationPath GlobalAttention-LifeGame-windows-x64.zip
     
     - name: Upload artifact
-      if: steps.cuda.outcome == 'success'
       uses: actions/upload-artifact@v4
       with:
         name: windows-build
         path: CMakePro_CUDA_LifeGame_V2/GlobalAttention-LifeGame-windows-x64.zip
         retention-days: 7
-    
-    - name: Skip Windows build if CUDA not available
-      if: steps.cuda.outcome == 'failure'
-      shell: pwsh
-      run: |
-        Write-Host "CUDA installation failed, skipping Windows build"
-        Write-Host "This is expected in environments without NVIDIA support"
 
   release:
     needs: [build-linux, build-windows]
