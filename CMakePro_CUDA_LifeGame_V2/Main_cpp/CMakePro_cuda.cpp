@@ -136,15 +136,14 @@ int main() {
     // 注册纹理到 CUDA
     cudaGraphicsGLRegisterImage(&gl.cudaRes, gl.lifeTex, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
 
-    // 初始化 CUDA 内部缓冲区
-    // --- [初始化部分] ---
-    InitCudaLife(1920, 1080); // 初始化随机数生成器
-    cudaMalloc(&gl.d_current, 1920 * 1080);
-    cudaMalloc(&gl.d_next, 1920 * 1080);
+    // 初始化 CUDA 内部缓冲区（float 化）
+    InitCudaLife(1920, 1080);
+    cudaMalloc(&gl.d_current, 1920 * 1080 * sizeof(float));
+    cudaMalloc(&gl.d_next, 1920 * 1080 * sizeof(float));
     cudaMalloc(&gl.d_heatData, 1920 * 1080 * sizeof(float));
 
-    // 必须：给初始数据！
-    SeedCudaLife(gl.d_current, 1920, 1080, 0.3f);
+    // 使用 float 版本的撒种函数
+    SeedCudaLifeFloat(gl.d_current, 1920, 1080, 0.3f);
 
     // 初始化 ImGui 与 ImPlot
     Init_Imgui(window);
