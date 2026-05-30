@@ -24,9 +24,9 @@
 
 // 跨平台 localtime 宏：Windows 用 localtime_s，Linux 用 localtime_r
 #ifdef _WIN32
-#define LOCALTIME(tm, time) localtime_s(&(tm), (time))
+#define LOCALTIME(tm_ptr, time_ptr) localtime_s((tm_ptr), (time_ptr))
 #else
-#define LOCALTIME(tm, time) localtime_r(&(time), &(tm))
+#define LOCALTIME(tm_ptr, time_ptr) localtime_r((time_ptr), (tm_ptr))
 #endif
 
 
@@ -496,7 +496,7 @@ void RenderIntroScreen0(SimState& state, int winW, int winH, bool& isIntroMode, 
 
         char timeBuf[32];
         time_t now = time(nullptr);
-        tm t_struct; LOCALTIME(t_struct, &now);
+        tm t_struct; LOCALTIME(&t_struct, &now);
         strftime(timeBuf, sizeof(timeBuf), "SYSTEM_UTC: %H:%M:%S", &t_struct);
         drawList->AddText(nullptr, 20.0f * scale, { 60 * scale, footY + 15 * scale }, IM_COL32(255, 255, 255, 100), timeBuf);
 
@@ -699,7 +699,7 @@ void RenderIntroScreen1(SimState& state, int winW, int winH, bool& isIntroMode, 
         {
             std::time_t now = std::time(nullptr);
             struct tm now_tm;
-            LOCALTIME(now_tm, &now);
+            LOCALTIME(&now_tm, &now);
             char timeBuf[64];
             std::strftime(timeBuf, sizeof(timeBuf), "%H:%M:%S", &now_tm);
 
@@ -2668,7 +2668,7 @@ inline void RenderHamStationScreen(SimState& state, int winW, int winH) {
             // --- 2. 实时系统时间 (Signal White) ---
             std::time_t now = std::time(nullptr);
             struct tm ltm;
-            LOCALTIME(ltm, &now);
+            LOCALTIME(&ltm, &now);
 
             ImGui::SetWindowFontScale(2.8f * scale); // 进一步加大时间显示
             ImGui::TextColored(COL_SIGNAL_WHITE, "%02d:%02d:%02d", ltm.tm_hour, ltm.tm_min, ltm.tm_sec);

@@ -38,7 +38,11 @@ extern "C" GpuInfo GetCudaDeviceInfo() {
     cudaDeviceProp prop;
     cudaGetDeviceProperties(&prop, 0);
 
+#ifdef _WIN32
     strncpy_s(info.name, prop.name, sizeof(info.name));
+#else
+    strncpy(info.name, prop.name, sizeof(info.name));
+#endif
     info.computeCapabilityMajor = prop.major;
     info.computeCapabilityMinor = prop.minor;
     info.totalMem = prop.totalGlobalMem;
