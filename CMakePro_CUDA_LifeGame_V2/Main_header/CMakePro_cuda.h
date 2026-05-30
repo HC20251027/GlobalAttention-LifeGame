@@ -22,6 +22,13 @@
 #include <unistd.h>
 #endif
 
+// 跨平台 localtime 宏：Windows 用 localtime_s，Linux 用 localtime_r
+#ifdef _WIN32
+#define LOCALTIME(tm, time) localtime_s(&(tm), (time))
+#else
+#define LOCALTIME(tm, time) localtime_r(&(time), &(tm))
+#endif
+
 
 #include "Cuda_Check.cuh"//cuda计算头文件
 
@@ -489,7 +496,7 @@ void RenderIntroScreen0(SimState& state, int winW, int winH, bool& isIntroMode, 
 
         char timeBuf[32];
         time_t now = time(nullptr);
-        tm t_struct; localtime_s(&t_struct, &now);
+        tm t_struct; LOCALTIME(t_struct, &now);
         strftime(timeBuf, sizeof(timeBuf), "SYSTEM_UTC: %H:%M:%S", &t_struct);
         drawList->AddText(nullptr, 20.0f * scale, { 60 * scale, footY + 15 * scale }, IM_COL32(255, 255, 255, 100), timeBuf);
 
@@ -692,7 +699,7 @@ void RenderIntroScreen1(SimState& state, int winW, int winH, bool& isIntroMode, 
         {
             std::time_t now = std::time(nullptr);
             struct tm now_tm;
-            localtime_s(&now_tm, &now);
+            LOCALTIME(now_tm, &now);
             char timeBuf[64];
             std::strftime(timeBuf, sizeof(timeBuf), "%H:%M:%S", &now_tm);
 
@@ -2212,14 +2219,14 @@ inline void RenderLifeGameScreen_GPU(SimState& state, int winW, int winH, GLHand
 
                     ImGui::TextColored(coreColor, "PRESET_BIOMASS");
                     if (ImGui::Button("RANDOM_SEED", { -1, 35 * scale })) {
-                        SeedCudaLife(gl.d_current, gl.simW, gl.simH, randomDensity);
+                        SeedCudaLifeFloat(gl.d_current, gl.simW, gl.simH, randomDensity);
                         generation = 0;
                         totalSimTime = 0;
                     }
                     ImGui::SliderFloat("DENSITY", &randomDensity, 0.01f, 0.5f);
 
                     if (ImGui::Button("RESET WORLD", { -1, 35 * scale })) {
-                        SeedCudaLife(gl.d_current, gl.simW, gl.simH, 0.0f);
+                        SeedCudaLifeFloat(gl.d_current, gl.simW, gl.simH, 0.0f);
                         generation = 0;
                         totalSimTime = 0;
                         cudaMemcpy(gl.d_next, gl.d_current, gl.simW * gl.simH, cudaMemcpyDeviceToDevice);
@@ -2661,7 +2668,7 @@ inline void RenderHamStationScreen(SimState& state, int winW, int winH) {
             // --- 2. 实时系统时间 (Signal White) ---
             std::time_t now = std::time(nullptr);
             struct tm ltm;
-            localtime_s(&ltm, &now);
+            LOCALTIME(ltm, &now);
 
             ImGui::SetWindowFontScale(2.8f * scale); // 进一步加大时间显示
             ImGui::TextColored(COL_SIGNAL_WHITE, "%02d:%02d:%02d", ltm.tm_hour, ltm.tm_min, ltm.tm_sec);
