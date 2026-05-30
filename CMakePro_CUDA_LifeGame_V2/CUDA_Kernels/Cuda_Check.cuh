@@ -42,3 +42,11 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+// ===================================================================
+// 全局注意力模式 Kernel 接口（float 版本）
+// ===================================================================
+#include "Cuda_Classic.cuh"
+#include "Cuda_GlobalStats.cuh"
+#include "Cuda_BlockAttention.cuh"
+#include "Cuda_FullAttention.cuh"
