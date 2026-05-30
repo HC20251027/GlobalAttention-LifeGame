@@ -1,0 +1,92 @@
+cmake_minimum_required(VERSION 3.18)
+
+# 设置 CUDA 架构
+set(CMAKE_CUDA_ARCHITECTURES 60 70 80 89 90)
+
+project(CMakePro_CUDA_LifeGame_V2 LANGUAGES CXX C CUDA)
+
+set(TARGET_NAME "CMakePro_CUDA_LifeGame_V2")
+
+# 查找依赖包
+find_package(OpenGL REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(GLEW REQUIRED)
+find_package(SDL2 REQUIRED)
+
+# ImGui & ImPlot
+file(GLOB IMGUIDocking_SRCS
+    "ImGui_docking/*.cpp"
+    "ImPlot/*.cpp"
+)
+
+# CUDA 核函数文件
+set(CUDA_KERNEL_SOURCES
+    "CUDA_Kernels/Cuda_Check.cu"
+    "CUDA_Kernels/Cuda_Classic.cu"
+    "CUDA_Kernels/Cuda_GlobalStats.cu"
+    "CUDA_Kernels/Cuda_BlockAttention.cu"
+    "CUDA_Kernels/Cuda_FullAttention.cu"
+)
+set(CUDA_KERNEL_HEADERS
+    "CUDA_Kernels/Cuda_Check.cuh"
+    "CUDA_Kernels/Cuda_Classic.cuh"
+    "CUDA_Kernels/Cuda_GlobalStats.cuh"
+    "CUDA_Kernels/Cuda_BlockAttention.cuh"
+    "CUDA_Kernels/Cuda_FullAttention.cuh"
+)
+
+set(PROJECT_SRCS "Main_cpp/CMakePro_cuda.cpp")
+
+add_executable(${TARGET_NAME}
+    ${IMGUIDocking_SRCS}
+    ${PROJECT_SRCS}
+    ${CUDA_KERNEL_SOURCES}
+    ${CUDA_KERNEL_HEADERS}
+    "Main_header/Common.h"
+    "Main_header/AttentionParams.h"
+)
+
+set_target_properties(${TARGET_NAME} PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+    CUDA_STANDARD 17
+)
+
+# CUDA 编译选项
+target_compile_options(${TARGET_NAME} PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:
+        --use_fast_math
+    >
+)
+
+# 资源文件同步
+set(RESOURCE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/resources_LifeGame_V2")
+set(RESOURCE_DEST_DIR "${CMAKE_BINARY_DIR}/resources_LifeGame_V2")
+
+file(GLOB_RECURSE RESOURCE_FILES "${RESOURCE_SRC_DIR}/*")
+
+add_custom_target(copy_resources_LifeGame_V2
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${RESOURCE_SRC_DIR} ${RESOURCE_DEST_DIR}
+    DEPENDS ${RESOURCE_FILES}
+    COMMENT "Syncing resource files..."
+)
+add_dependencies(${TARGET_NAME} copy_resources_LifeGame_V2)
+
+# 头文件路径
+target_include_directories(${TARGET_NAME} PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/Main_header"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ImGui_docking"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ImPlot"
+    "${CMAKE_CURRENT_SOURCE_DIR}/stb_image"
+    "${CMAKE_CURRENT_SOURCE_DIR}/CUDA_Kernels"
+)
+
+# 链接库
+target_link_libraries(${TARGET_NAME} PRIVATE
+    OpenGL::GL
+    glfw
+    GLEW::GLEW
+    SDL2::SDL2
+    CUDA::cudart
+    CUDA::cuda_driver
+)

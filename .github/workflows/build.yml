@@ -1,0 +1,151 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    container:
+      image: nvidia/cuda:12.3.0-devel-ubuntu22.04
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y \
+          cmake \
+          ninja-build \
+          libglfw3-dev \
+          libglew-dev \
+          libsdl2-dev \
+          libglm-dev
+    
+    - name: Setup CMakeLists for CI
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: |
+        cp CMakeLists.txt.ci CMakeLists.txt
+    
+    - name: Configure
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: |
+        cmake -B build \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90"
+    
+    - name: Build
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} -j$(nproc)
+    
+    - name: Prepare package
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: |
+        mkdir -p package
+        cp build/CMakePro_CUDA_LifeGame_V2 package/ || echo "Binary not found"
+        cp -r resources_LifeGame_V2 package/
+        tar -czf GlobalAttention-LifeGame-linux-x64.tar.gz -C package .
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-build
+        path: CMakePro_CUDA_LifeGame_V2/GlobalAttention-LifeGame-linux-x64.tar.gz
+        retention-days: 7
+
+  build-windows:
+    runs-on: windows-2022
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup CUDA
+      uses: Jimver/cuda-toolkit@v0.2.14
+      with:
+        cuda: '12.3.0'
+        use-github-cache: true
+    
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'a42af01b72c28a8e1d7b48107b33e4f286a55ef6'
+        vcpkgJsonGlob: '**/vcpkg.json'
+    
+    - name: Install dependencies
+      run: |
+        vcpkg install glfw3:x64-windows glew:x64-windows sdl2:x64-windows glm:x64-windows
+    
+    - name: Setup CMakeLists for CI
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      shell: pwsh
+      run: |
+        Copy-Item CMakeLists.txt.ci CMakeLists.txt -Force
+    
+    - name: Configure
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      shell: cmd
+      run: |
+        cmake -B build -G "Visual Studio 17 2022" -A x64 ^
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} ^
+          -DCMAKE_CUDA_ARCHITECTURES="60;70;80;89;90" ^
+          -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+    
+    - name: Build
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+    
+    - name: Prepare package
+      working-directory: CMakePro_CUDA_LifeGame_V2
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path package
+        Copy-Item build\Release\CMakePro_CUDA_LifeGame_V2.exe package\ -ErrorAction SilentlyContinue
+        Copy-Item -Recurse resources_LifeGame_V2 package\
+        Compress-Archive -Path package\* -DestinationPath GlobalAttention-LifeGame-windows-x64.zip
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-build
+        path: CMakePro_CUDA_LifeGame_V2/GlobalAttention-LifeGame-windows-x64.zip
+        retention-days: 7
+
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: false
+    
+    - name: List artifacts
+      run: |
+        echo "Downloaded artifacts:"
+        find artifacts -type f -ls
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/linux-build/*.tar.gz
+          artifacts/windows-build/*.zip
+        generate_release_notes: true
+        fail_on_unmatched_files: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
