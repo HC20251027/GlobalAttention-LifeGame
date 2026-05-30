@@ -93,14 +93,16 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     OpenGL::GL
     glfw
     GLEW::GLEW
-    CUDA::cudart
-    CUDA::cuda_driver
 )
+
+# CUDA 链接
+find_package(CUDAToolkit REQUIRED)
+target_link_libraries(${TARGET_NAME} PRIVATE CUDA::cudart)
 
 # SDL2 链接
 if(TARGET SDL2::SDL2)
     target_link_libraries(${TARGET_NAME} PRIVATE SDL2::SDL2)
-else()
+elseif(SDL2_LIBRARIES)
     target_include_directories(${TARGET_NAME} PRIVATE ${SDL2_INCLUDE_DIRS})
     target_link_libraries(${TARGET_NAME} PRIVATE ${SDL2_LIBRARIES})
 endif()
